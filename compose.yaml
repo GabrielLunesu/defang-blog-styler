@@ -1,5 +1,5 @@
 services:
-  web:
+  app:
     x-defang-llm: true
     build:
       context: .

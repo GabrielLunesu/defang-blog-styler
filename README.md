@@ -24,6 +24,9 @@ cd blog-styler
 # Set your Anthropic API key
 cp .env.example .env.local
 # Edit .env.local with your key
+
+# Install dependencies
+pnpm install
 ```
 
 #### Running with Docker Compose
@@ -42,9 +45,6 @@ docker-compose -f compose.dev.yaml up
 #### Running with PNPM
 
 ```bash
-# Install dependencies
-pnpm install
-
 # Set your LLM model in .env.local
 # You can choose from supported models here:
 # https://mastra.ai/models/providers/anthropic#models
