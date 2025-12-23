@@ -21,30 +21,49 @@ A Next.js app powered by [Mastra](https://mastra.ai) and Claude that transforms 
 git clone https://github.com/DefangLabs/blog-styler
 cd blog-styler
 
-# Install dependencies
-npm install
-
 # Set your Anthropic API key
 cp .env.example .env.local
 # Edit .env.local with your key
+```
 
-# Run dev server
-npm run dev
+#### Running with Docker Compose
+
+```bash
+# Set your LLM model in compose.dev.yaml
+# You can choose from supported models here:
+# https://mastra.ai/models/providers/anthropic#models
+# here an example:
+LLM_MODEL=anthropic/claude-3-5-sonnet-202410
+
+#### Run with Docker Compose
+docker-compose -f compose.dev.yaml up
+```
+
+#### Running with PNPM
+
+```bash
+# Install dependencies
+pnpm install
+
+# Set your LLM model in .env.local
+# You can choose from supported models here:
+# https://mastra.ai/models/providers/anthropic#models
+# here an example:
+LLM_MODEL=anthropic/claude-3-5-sonnet-202410
+
+# Run the development server
+pnpm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to use the app.
 
 ### Deploy to AWS with Defang
 
+When deploying witn defang you do not need to set an API key since we set `x-defang-llm: true` in the compose.yaml which provisions an AWS role for you.
+
 ```bash
 # Install Defang CLI
 npm install -g defang
-
-# Login
-defang login
-
-# Set your API key
-defang config set ANTHROPIC_API_KEY
 
 # Deploy
 defang compose up --provider=aws
@@ -81,6 +100,7 @@ Your app will be live in ~3 minutes!
 Transform raw blog content into styled HTML.
 
 **Request:**
+
 ```json
 {
   "content": "Your raw blog content with markdown..."
@@ -88,6 +108,7 @@ Transform raw blog content into styled HTML.
 ```
 
 **Response:**
+
 ```json
 {
   "html": "<article class=\"defang-blog\">...</article>",
@@ -104,6 +125,7 @@ Same as above, but streams the response for real-time display.
 ### Modify the Agent
 
 Edit `src/mastra/agents/blog-styler.ts` to:
+
 - Change the system prompt
 - Add new component patterns
 - Adjust brand colors

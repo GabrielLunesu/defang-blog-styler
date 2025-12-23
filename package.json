@@ -9,9 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^3.0.67",
     "@ai-sdk/anthropic": "^2.0.56",
     "@anthropic-ai/sdk": "^0.32.1",
-    "@mastra/core": "^0.24.9",
+    "@aws-sdk/credential-providers": "^3.957.0",
+    "@mastra/ai-sdk": "^0.3.3",
+    "@mastra/core": "^0.24.1",
     "@monaco-editor/react": "^4.7.0",
     "@tiptap/extension-bubble-menu": "^3.14.0",
     "@tiptap/extension-code-block-lowlight": "^3.14.0",
