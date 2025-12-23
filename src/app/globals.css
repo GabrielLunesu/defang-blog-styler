@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 47.4% 11.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 47.4% 11.2%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 47.4% 11.2%;
+  --primary: 201 88% 46%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 199 89% 48%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 201 88% 46%;
+  --radius: 20px;
+}
+
+html {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  background-color: #ffffff;
+}
+
+body {
+  min-height: 100%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Ensure blog preview renders correctly */
+.defang-blog {
+  @apply max-w-none;
+}
+
+/* Code block scrollbar styling */
+pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+pre::-webkit-scrollbar-track {
+  @apply bg-slate-100 rounded;
+}
+
+pre::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded hover:bg-slate-400;
+}
+
+/* Details/FAQ styling */
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Smooth transitions for interactive elements */
+* {
+  @apply transition-colors duration-200;
+}
+
+/* Ensure AOS-hidden elements are visible inside the embedded preview */
+.preview-pane [data-aos] {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* Gradient animation for generating button */
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient {
+  animation: gradient 2s ease infinite;
+}
