@@ -1,18 +1,11 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
-import Highlight from "@tiptap/extension-highlight";
-import Placeholder from "@tiptap/extension-placeholder";
-import { useCallback, useEffect } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 
 interface VisualEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSelectionChange?: (selection: { text: string; html: string } | null) => void;
-  onAIAssist?: (selectedHtml: string, action: string) => void;
 }
 
 export default function VisualEditor({
@@ -20,84 +13,274 @@ export default function VisualEditor({
   onChange,
   onSelectionChange,
 }: VisualEditorProps) {
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [2, 3, 4],
-        },
-        codeBlock: {
-          HTMLAttributes: {
-            class: "bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-sm",
-          },
-        },
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: "text-blue-600 hover:text-blue-800 underline underline-offset-2",
-        },
-      }),
-      Image.configure({
-        HTMLAttributes: {
-          class: "rounded-xl shadow-lg max-w-full",
-        },
-      }),
-      Highlight.configure({
-        HTMLAttributes: {
-          class: "bg-yellow-200 px-1 rounded",
-        },
-      }),
-      Placeholder.configure({
-        placeholder: "Start typing or paste your styled HTML...",
-      }),
-    ],
-    content: value,
-    editorProps: {
-      attributes: {
-        class: "prose prose-slate max-w-none focus:outline-none min-h-[400px] p-6",
-      },
-    },
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
-    },
-    onSelectionUpdate: ({ editor }) => {
-      if (!onSelectionChange) return;
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isReady, setIsReady] = useState(false);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
 
-      const { from, to } = editor.state.selection;
-      if (from !== to) {
-        const text = editor.state.doc.textBetween(from, to, " ");
-        // Get selected HTML
-        const slice = editor.state.doc.slice(from, to);
-        let html = "";
-        slice.content.forEach((node) => {
-          if (node.isText) {
-            html += node.text || "";
-          } else {
-            // For non-text nodes, get text content
-            html += node.textContent;
-          }
-        });
-        onSelectionChange({ text, html: html || text });
-      } else {
-        onSelectionChange(null);
-      }
-    },
-  });
-
-  // Sync external value changes
+  // Keep refs updated
   useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value, { emitUpdate: false });
+    valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+
+  // Set up message listener FIRST (only once)
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data.type === "editor-ready") {
+        setIsReady(true);
+        // Set initial content immediately
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: "set-content", html: valueRef.current },
+          "*"
+        );
+      } else if (e.data.type === "content-change") {
+        valueRef.current = e.data.html;
+        onChangeRef.current(e.data.html);
+      } else if (e.data.type === "selection-change") {
+        if (e.data.text) {
+          onSelectionChangeRef.current?.({ text: e.data.text, html: e.data.html });
+        } else {
+          onSelectionChangeRef.current?.(null);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []); // Empty deps - only run once
+
+  // Initialize iframe AFTER message listener is set up
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    // Use a small delay to ensure message listener is ready
+    const timeoutId = setTimeout(() => {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+
+      doc.open();
+      doc.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 24px;
+      min-height: 100%;
+      background: white;
+      color: #1e293b;
     }
-  }, [editor, value]);
+    /* Override AOS - make all elements visible */
+    [data-aos] {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+    [contenteditable]:focus {
+      outline: none;
+    }
+    [contenteditable] *::selection {
+      background: rgba(59, 130, 246, 0.3);
+    }
+    [contenteditable] > *:hover {
+      outline: 1px dashed rgba(59, 130, 246, 0.3);
+      outline-offset: 2px;
+    }
+    [contenteditable] {
+      cursor: text;
+      min-height: 200px;
+    }
+    /* Ensure all content is visible */
+    [contenteditable] * {
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+    .editor-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 8px 12px;
+      margin: -24px -24px 16px -24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .toolbar-btn {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      background: white;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toolbar-btn:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    .toolbar-btn:active {
+      background: #e2e8f0;
+    }
+    .toolbar-divider {
+      width: 1px;
+      background: #e2e8f0;
+      margin: 0 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="editor-toolbar">
+    <button class="toolbar-btn" data-cmd="bold" title="Bold"><b>B</b></button>
+    <button class="toolbar-btn" data-cmd="italic" title="Italic"><i>I</i></button>
+    <button class="toolbar-btn" data-cmd="underline" title="Underline"><u>U</u></button>
+    <button class="toolbar-btn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+    <span class="toolbar-divider"></span>
+    <button class="toolbar-btn" data-cmd="insertUnorderedList" title="Bullet List">• List</button>
+    <button class="toolbar-btn" data-cmd="insertOrderedList" title="Numbered List">1. List</button>
+    <span class="toolbar-divider"></span>
+    <button class="toolbar-btn" data-cmd="formatBlock" data-value="h2" title="Heading 2">H2</button>
+    <button class="toolbar-btn" data-cmd="formatBlock" data-value="h3" title="Heading 3">H3</button>
+    <button class="toolbar-btn" data-cmd="formatBlock" data-value="p" title="Paragraph">¶</button>
+    <span class="toolbar-divider"></span>
+    <button class="toolbar-btn" data-cmd="createLink" title="Add Link">🔗</button>
+    <button class="toolbar-btn" data-cmd="unlink" title="Remove Link">✂️</button>
+    <span class="toolbar-divider"></span>
+    <button class="toolbar-btn" data-cmd="undo" title="Undo">↩</button>
+    <button class="toolbar-btn" data-cmd="redo" title="Redo">↪</button>
+  </div>
+  <div id="editor" contenteditable="true"></div>
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    const editor = document.getElementById('editor');
+
+    document.querySelectorAll('.toolbar-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const cmd = btn.dataset.cmd;
+        const value = btn.dataset.value || null;
+
+        if (cmd === 'createLink') {
+          const url = prompt('Enter URL:');
+          if (url) document.execCommand(cmd, false, url);
+        } else if (cmd === 'formatBlock') {
+          document.execCommand(cmd, false, '<' + value + '>');
+        } else {
+          document.execCommand(cmd, false, value);
+        }
+        editor.focus();
+        notifyChange();
+      });
+    });
+
+    function notifyChange() {
+      window.parent.postMessage({ type: 'content-change', html: editor.innerHTML }, '*');
+    }
+
+    function notifySelection() {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim()) {
+        try {
+          const range = selection.getRangeAt(0);
+          const fragment = range.cloneContents();
+          const div = document.createElement('div');
+          div.appendChild(fragment);
+          window.parent.postMessage({
+            type: 'selection-change',
+            text: selection.toString(),
+            html: div.innerHTML || selection.toString()
+          }, '*');
+        } catch(e) {
+          window.parent.postMessage({ type: 'selection-change', text: null, html: null }, '*');
+        }
+      } else {
+        window.parent.postMessage({ type: 'selection-change', text: null, html: null }, '*');
+      }
+    }
+
+    editor.addEventListener('input', notifyChange);
+    document.addEventListener('selectionchange', notifySelection);
+
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'set-content') {
+        editor.innerHTML = e.data.html || '';
+        if (typeof AOS !== 'undefined') AOS.refresh();
+      }
+    });
+
+    // Signal ready after a small delay to ensure parent listener is set up
+    setTimeout(() => {
+      window.parent.postMessage({ type: 'editor-ready' }, '*');
+    }, 100);
+
+    if (typeof AOS !== 'undefined') {
+      AOS.init({ duration: 600, once: true, disable: true });
+    }
+  </script>
+</body>
+</html>`);
+      doc.close();
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // Update iframe content when value changes externally
+  useEffect(() => {
+    if (isReady && value !== valueRef.current) {
+      valueRef.current = value;
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "set-content", html: value },
+        "*"
+      );
+    }
+  }, [value, isReady]);
 
   // Replace selection method for AI responses
   const replaceSelection = useCallback((newHtml: string) => {
-    if (!editor) return;
-    editor.chain().focus().deleteSelection().insertContent(newHtml).run();
-  }, [editor]);
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    const selection = doc.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+
+    const temp = doc.createElement("div");
+    temp.innerHTML = newHtml;
+    const frag = doc.createDocumentFragment();
+    while (temp.firstChild) {
+      frag.appendChild(temp.firstChild);
+    }
+    range.insertNode(frag);
+
+    const editor = doc.getElementById("editor");
+    if (editor) {
+      valueRef.current = editor.innerHTML;
+      onChangeRef.current(editor.innerHTML);
+    }
+  }, []);
 
   // Expose via window for external access
   useEffect(() => {
@@ -108,171 +291,19 @@ export default function VisualEditor({
     }
   }, [replaceSelection]);
 
-  if (!editor) {
-    return (
-      <div className="flex items-center justify-center h-full bg-white rounded-xl">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full w-full bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center gap-1 p-2 border-b border-slate-200 bg-slate-50 flex-wrap shrink-0">
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          isActive={editor.isActive("bold")}
-          title="Bold"
-        >
-          <span className="font-bold">B</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          isActive={editor.isActive("italic")}
-          title="Italic"
-        >
-          <span className="italic">I</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          isActive={editor.isActive("strike")}
-          title="Strikethrough"
-        >
-          <span className="line-through">S</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleCode().run()}
-          isActive={editor.isActive("code")}
-          title="Inline Code"
-        >
-          <span className="font-mono text-xs">&lt;/&gt;</span>
-        </ToolbarButton>
-
-        <div className="w-px h-6 bg-slate-300 mx-1" />
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          isActive={editor.isActive("heading", { level: 2 })}
-          title="Heading 2"
-        >
-          H2
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          isActive={editor.isActive("heading", { level: 3 })}
-          title="Heading 3"
-        >
-          H3
-        </ToolbarButton>
-
-        <div className="w-px h-6 bg-slate-300 mx-1" />
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          isActive={editor.isActive("bulletList")}
-          title="Bullet List"
-        >
-          <span className="text-lg leading-none">•</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          isActive={editor.isActive("orderedList")}
-          title="Numbered List"
-        >
-          <span className="text-sm">1.</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          isActive={editor.isActive("codeBlock")}
-          title="Code Block"
-        >
-          <span className="font-mono text-xs">{"{ }"}</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          isActive={editor.isActive("blockquote")}
-          title="Quote"
-        >
-          <span className="text-lg leading-none">&quot;</span>
-        </ToolbarButton>
-
-        <div className="w-px h-6 bg-slate-300 mx-1" />
-
-        <ToolbarButton
-          onClick={() => {
-            const url = window.prompt("Enter URL:");
-            if (url) {
-              editor.chain().focus().setLink({ href: url }).run();
-            }
-          }}
-          isActive={editor.isActive("link")}
-          title="Add Link"
-        >
-          <span className="text-sm">🔗</span>
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().unsetLink().run()}
-          isActive={false}
-          title="Remove Link"
-          disabled={!editor.isActive("link")}
-        >
-          <span className="text-sm line-through">🔗</span>
-        </ToolbarButton>
-
-        <div className="flex-1" />
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().undo().run()}
-          isActive={false}
-          title="Undo"
-          disabled={!editor.can().undo()}
-        >
-          ↩
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().redo().run()}
-          isActive={false}
-          title="Redo"
-          disabled={!editor.can().redo()}
-        >
-          ↪
-        </ToolbarButton>
-      </div>
-
-      {/* Editor Content */}
-      <div className="overflow-auto flex-1">
-        <EditorContent editor={editor} className="h-full" />
-      </div>
+    <div className="h-full w-full bg-white rounded-xl overflow-hidden border border-slate-200 flex flex-col relative">
+      {!isReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+        </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        className="flex-1 w-full border-0"
+        title="Visual Editor"
+        sandbox="allow-scripts allow-same-origin"
+      />
     </div>
-  );
-}
-
-function ToolbarButton({
-  onClick,
-  isActive,
-  title,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  isActive: boolean;
-  title: string;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={`
-        w-8 h-8 flex items-center justify-center rounded text-sm transition-colors
-        ${isActive ? "bg-blue-100 text-blue-700" : "hover:bg-slate-200 text-slate-700"}
-        ${disabled ? "opacity-40 cursor-not-allowed" : ""}
-      `}
-    >
-      {children}
-    </button>
   );
 }
