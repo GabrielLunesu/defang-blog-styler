@@ -1,4 +1,6 @@
 import { Agent } from "@mastra/core/agent";
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 
 const DEFANG_BLOG_SYSTEM_PROMPT = `You are an elite blog designer for Defang.io, a cloud deployment platform that lets developers deploy to AWS/GCP with one command. You transform raw blog content into stunning, production-ready HTML with Tailwind CSS.
 
@@ -185,8 +187,24 @@ Defang Links to Use:
 - GitHub: https://github.com/DefangLabs
 - Pricing: https://defang.io/pricing`;
 
+function getModel() {
+  const modelName = process.env.LLM_MODEL;
+  if (modelName === undefined) {
+    throw new Error("LLM_MODEL is not defined in environment variables");
+  }
+
+  if (process.env.AWS_REGION) {
+    // https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock#using-aws-sdk-credentials-chain-instance-profiles-instance-roles-ecs-roles-eks-service-accounts-etc
+    return createAmazonBedrock({
+      credentialProvider: fromNodeProviderChain(),
+    })(modelName);
+  }
+
+  return modelName;
+}
+
 export const blogStylerAgent = new Agent({
   name: "Defang Blog Styler",
   instructions: DEFANG_BLOG_SYSTEM_PROMPT,
-  model: "anthropic/claude-sonnet-4-20250514",
+  model: getModel,
 });

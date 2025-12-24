@@ -1,12 +1,20 @@
 services:
-  web:
-    build: .
+  app:
+    x-defang-llm: true
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - mode: ingress
+        target: 3000
+        published: 3000
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Pick from list of supported models here:
+      # https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock#model-capabilities
+      - LLM_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
