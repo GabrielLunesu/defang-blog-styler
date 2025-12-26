@@ -1,5 +1,6 @@
 services:
   app:
+    domainname: defang-styler.blog
     x-defang-llm: true
     build:
       context: .
@@ -8,10 +9,11 @@ services:
       - mode: ingress
         target: 3000
         published: 3000
+        protocol: http
     environment:
       # Pick from list of supported models here:
       # https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock#model-capabilities
-      - LLM_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+      - LLM_MODEL=anthropic.claude-sonnet-4-5
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]

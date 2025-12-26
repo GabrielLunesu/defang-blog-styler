@@ -1,0 +1,3 @@
+AWS_PROFILE="defang-lab"
+AWS_REGION="us-west-2"
+DEFANG_PROVIDER="aws"

@@ -103,17 +103,14 @@ export async function PUT(req: NextRequest) {
 ${context ? `Context (surrounding content for reference):\n${context}\n\n` : ""}Selected HTML to modify:
 ${selectedHtml}`;
 
-    const stream = await agent.stream(
-      [
-        {
-          role: "user",
-          content: fullPrompt,
-        },
-      ],
-      { format: "aisdk" }
-    );
+    const stream = await agent.stream([
+      {
+        role: "user",
+        content: fullPrompt,
+      },
+    ]);
 
-    return stream.toUIMessageStreamResponse();
+    return stream.aisdk.v5.toUIMessageStreamResponse();
   } catch (error) {
     console.error("AI assist stream error:", error);
     return new Response(JSON.stringify({ error: "Failed to stream AI response" }), {

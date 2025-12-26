@@ -50,6 +50,10 @@ const ALLOWED_TAGS = new Set([
   "article", "section", "div", "span", "p", "a", "strong", "em", "ul", "ol", "li",
   "h1", "h2", "h3", "h4", "h5", "h6", "pre", "code", "table", "thead", "tbody",
   "tr", "th", "td", "figure", "figcaption", "img", "details", "summary", "blockquote", "hr", "br",
+  // SVG elements for icons
+  "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "clipPath", "use",
+  // Additional semantic elements
+  "nav", "header", "footer", "aside", "main", "time", "cite", "mark", "small", "sub", "sup",
 ]);
 
 const DISALLOWED_TAGS = new Set(["script", "style", "iframe", "object", "embed", "link", "meta"]);
@@ -61,6 +65,18 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   img: new Set(["src", "alt", "width", "height", "loading"]),
   th: new Set(["scope", "colspan", "rowspan"]),
   td: new Set(["colspan", "rowspan"]),
+  // SVG attributes
+  svg: new Set(["viewBox", "fill", "stroke", "xmlns", "width", "height", "preserveAspectRatio"]),
+  path: new Set(["d", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"]),
+  circle: new Set(["cx", "cy", "r", "fill", "stroke", "stroke-width"]),
+  rect: new Set(["x", "y", "width", "height", "rx", "ry", "fill", "stroke", "stroke-width"]),
+  line: new Set(["x1", "y1", "x2", "y2", "stroke", "stroke-width"]),
+  polyline: new Set(["points", "fill", "stroke", "stroke-width"]),
+  polygon: new Set(["points", "fill", "stroke"]),
+  g: new Set(["fill", "stroke", "transform"]),
+  use: new Set(["href", "xlink:href", "x", "y", "width", "height"]),
+  // Time element
+  time: new Set(["datetime"]),
 };
 
 const isSafeUrl = (value: string, allowDataImage = false) => {
@@ -161,9 +177,45 @@ const sanitizeHtml = (html: string) => {
 
 type EditorMode = "preview" | "visual" | "code";
 
+interface SEOMetadata {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+  ogTitle?: string;
+  ogDescription?: string;
+  canonicalSlug?: string;
+  category?: string;
+  estimatedReadTime?: string;
+  targetAudience?: string;
+}
+
+// Parse SEO metadata from the response
+const parseSEOAndHtml = (text: string): { seo: SEOMetadata | null; html: string } => {
+  const startMarker = "<!-- SEO_META_START -->";
+  const endMarker = "<!-- SEO_META_END -->";
+
+  const startIdx = text.indexOf(startMarker);
+  const endIdx = text.indexOf(endMarker);
+
+  if (startIdx === -1 || endIdx === -1) {
+    return { seo: null, html: text };
+  }
+
+  const jsonStr = text.slice(startIdx + startMarker.length, endIdx).trim();
+  const htmlContent = text.slice(endIdx + endMarker.length).trim();
+
+  try {
+    const seo = JSON.parse(jsonStr) as SEOMetadata;
+    return { seo, html: htmlContent };
+  } catch {
+    return { seo: null, html: htmlContent || text };
+  }
+};
+
 export default function Home() {
   const [content, setContent] = useState(SAMPLE_CONTENT);
   const [html, setHtml] = useState("");
+  const [seoMetadata, setSeoMetadata] = useState<SEOMetadata | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("preview");
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
@@ -181,6 +233,7 @@ export default function Home() {
   const handleGenerate = async () => {
     setIsGenerating(true);
     setHtml("");
+    setSeoMetadata(null);
     setEditorMode("preview");
 
     try {
@@ -202,8 +255,17 @@ export default function Home() {
 
         const chunk = decoder.decode(value, { stream: true });
         result += chunk;
-        setHtml(result);
+
+        // Parse SEO and HTML as we stream
+        const { seo, html: parsedHtml } = parseSEOAndHtml(result);
+        if (seo) setSeoMetadata(seo);
+        setHtml(parsedHtml);
       }
+
+      // Final parse after stream completes
+      const { seo, html: parsedHtml } = parseSEOAndHtml(result);
+      if (seo) setSeoMetadata(seo);
+      setHtml(parsedHtml);
     } catch (error) {
       console.error("Error:", error);
       alert("Failed to generate styled blog. Check console for details.");
@@ -480,20 +542,34 @@ export default function Home() {
 
               <CardContent>
                 <div className="overflow-hidden rounded-2xl border border-border">
-                  {/* Preview Mode */}
+                  {/* Preview Mode - uses iframe with Tailwind CDN for accurate rendering */}
                   {editorMode === "preview" && (
-                    <div
-                      ref={previewRef}
-                      data-preview="true"
-                      className="preview-pane defang-blog h-[700px] overflow-y-auto bg-white p-8 text-slate-900"
-                    >
+                    <div ref={previewRef} className="h-[700px] bg-white">
                       {sanitizedHtml ? (
-                        <>
-                          <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
-                          {isGenerating && (
-                            <span className="inline-block w-0.5 h-5 bg-primary animate-pulse ml-0.5 align-middle" />
-                          )}
-                        </>
+                        <iframe
+                          className="w-full h-full border-0"
+                          title="Blog Preview"
+                          srcDoc={`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; background: white; color: #1e293b; }
+    /* Ensure animations play */
+    [data-aos] { opacity: 1 !important; transform: none !important; }
+  </style>
+</head>
+<body>
+  ${sanitizedHtml}
+  ${isGenerating ? '<span style="display:inline-block;width:2px;height:20px;background:#3b82f6;animation:pulse 1s infinite;margin-left:2px;vertical-align:middle"></span>' : ''}
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>AOS.init({ duration: 600, once: true });</script>
+</body>
+</html>`}
+                        />
                       ) : isGenerating ? (
                         <div className="flex flex-col items-center justify-center h-full gap-4">
                           <div className="flex gap-1.5">
@@ -504,7 +580,9 @@ export default function Home() {
                           <p className="text-muted-foreground text-sm">Generating your styled blog...</p>
                         </div>
                       ) : (
-                        <p className="text-muted-foreground text-center mt-20">Styled output will appear here...</p>
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-muted-foreground">Styled output will appear here...</p>
+                        </div>
                       )}
                     </div>
                   )}
@@ -538,8 +616,158 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
+
+          {/* SEO Metadata Section */}
+          {seoMetadata && (
+            <Card data-aos="fade-up" className="border-green-200 bg-gradient-to-br from-green-50/50 to-white">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-green-600 flex items-center justify-center">
+                    <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <CardTitle className="text-green-900">SEO Metadata</CardTitle>
+                    <CardDescription>Copy these values for your CMS or meta tags</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Title */}
+                  {seoMetadata.title && (
+                    <SEOField label="Meta Title" value={seoMetadata.title} charCount hint="50-60 chars ideal" />
+                  )}
+
+                  {/* Description */}
+                  {seoMetadata.description && (
+                    <SEOField label="Meta Description" value={seoMetadata.description} charCount hint="150-160 chars ideal" className="md:col-span-2" />
+                  )}
+
+                  {/* Keywords */}
+                  {seoMetadata.keywords && seoMetadata.keywords.length > 0 && (
+                    <SEOField label="Keywords" value={seoMetadata.keywords.join(", ")} className="md:col-span-2" />
+                  )}
+
+                  {/* OG Title */}
+                  {seoMetadata.ogTitle && (
+                    <SEOField label="Open Graph Title" value={seoMetadata.ogTitle} />
+                  )}
+
+                  {/* OG Description */}
+                  {seoMetadata.ogDescription && (
+                    <SEOField label="Open Graph Description" value={seoMetadata.ogDescription} />
+                  )}
+
+                  {/* Canonical Slug */}
+                  {seoMetadata.canonicalSlug && (
+                    <SEOField label="URL Slug" value={seoMetadata.canonicalSlug} />
+                  )}
+
+                  {/* Category */}
+                  {seoMetadata.category && (
+                    <SEOField label="Category" value={seoMetadata.category} />
+                  )}
+
+                  {/* Read Time & Audience */}
+                  <div className="flex gap-4 md:col-span-2">
+                    {seoMetadata.estimatedReadTime && (
+                      <div className="flex-1">
+                        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Read Time</span>
+                        <p className="mt-1 text-sm font-medium text-slate-700">{seoMetadata.estimatedReadTime}</p>
+                      </div>
+                    )}
+                    {seoMetadata.targetAudience && (
+                      <div className="flex-1">
+                        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Target Audience</span>
+                        <p className="mt-1 text-sm font-medium text-slate-700">{seoMetadata.targetAudience}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Copy All Button */}
+                <div className="mt-6 pt-4 border-t border-green-100">
+                  <Button
+                    variant="outline"
+                    className="border-green-300 text-green-700 hover:bg-green-50"
+                    onClick={() => {
+                      const allSEO = Object.entries(seoMetadata)
+                        .filter(([, v]) => v)
+                        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+                        .join("\n");
+                      navigator.clipboard.writeText(allSEO);
+                      alert("All SEO metadata copied!");
+                    }}
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy All SEO Data
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </section>
     </main>
+  );
+}
+
+// SEO Field component with copy button
+function SEOField({
+  label,
+  value,
+  charCount,
+  hint,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  charCount?: boolean;
+  hint?: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className={`group relative ${className}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
+        {charCount && (
+          <span className={`text-xs ${value.length > 160 ? "text-amber-600" : "text-slate-400"}`}>
+            {value.length} chars {hint && `(${hint})`}
+          </span>
+        )}
+      </div>
+      <div className="relative">
+        <div className="bg-white border border-slate-200 rounded-lg p-3 pr-12 text-sm text-slate-700 break-words">
+          {value}
+        </div>
+        <button
+          onClick={handleCopy}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-slate-100 transition-colors"
+          title="Copy to clipboard"
+        >
+          {copied ? (
+            <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="h-4 w-4 text-slate-400 group-hover:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }

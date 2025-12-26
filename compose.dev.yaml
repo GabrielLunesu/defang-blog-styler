@@ -4,6 +4,11 @@ services:
       file: compose.yaml
       service: app
     command: ["pnpm", "run", "dev"]
+    # Override ports for local Docker (protocol: http is Defang-specific)
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
     environment:
       # Pick from list of supported models here:
       # https://mastra.ai/models/providers/anthropic#models

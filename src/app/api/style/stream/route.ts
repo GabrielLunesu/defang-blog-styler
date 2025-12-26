@@ -20,21 +20,29 @@ export async function POST(req: NextRequest) {
       ? `\n\nReference Docs (for factual accuracy only; do not copy verbatim unless asked):\n${defangDocs}`
       : "";
 
-    const stream = await agent.stream(
-      [
-        {
-          role: "user",
-          content: `Transform this raw blog content into production-ready HTML following Defang guidelines exactly. Output ONLY the HTML, starting with <article class="defang-blog" ...> (additional attributes allowed) and ending with </article>. No explanations, no markdown.
+    // Response format:
+    // <!-- SEO_META_START -->
+    // { "title": "...", "description": "...", "keywords": [...], ... }
+    // <!-- SEO_META_END -->
+    // <article class="defang-blog" ...>...</article>
+    const stream = await agent.stream([
+      {
+        role: "user",
+        content: `Transform this raw blog content into production-ready HTML following Defang guidelines exactly.
+
+Output format (in this exact order):
+1. SEO metadata block: <!-- SEO_META_START --> followed by JSON, then <!-- SEO_META_END -->
+2. HTML: starting with <article class="defang-blog" ...> and ending with </article>
+
+No explanations, no markdown. Just the SEO block then the HTML.
 Use the reference docs only for factual accuracy and terminology. Do not add claims or features not supported by the docs or the raw content. Do not change the meaning of the raw content.
 
 Raw Content:
 ${content}${docsContext}`,
-        },
-      ],
-      { format: "aisdk" }
-    );
+      },
+    ]);
 
-    return stream.toTextStreamResponse();
+    return stream.aisdk.v5.toTextStreamResponse();
   } catch (error) {
     console.error("Error streaming blog:", error);
     return new Response(JSON.stringify({ error: "Failed to style blog" }), {
