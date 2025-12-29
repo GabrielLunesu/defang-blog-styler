@@ -307,7 +307,7 @@ Concepts:
 - Security: https://docs.defang.io/docs/concepts/security
 - Debug: https://docs.defang.io/docs/concepts/debug
 - BYOC Overview: https://docs.defang.io/docs/concepts/defang-byoc
-- Playground Overview: https://docs.defang.io/docs/concepts/defang-playground
+
 - Pulumi Concept: https://docs.defang.io/docs/concepts/pulumi
 - AI Generate: https://docs.defang.io/docs/concepts/generate
 - Scaling: https://docs.defang.io/docs/concepts/scaling
@@ -329,7 +329,7 @@ Managed LLMs:
 Tutorials:
 - Deploy to AWS: https://docs.defang.io/docs/tutorials/deploy-to-aws
 - Deploy to GCP: https://docs.defang.io/docs/tutorials/deploy-to-gcp
-- Deploy to Playground: https://docs.defang.io/docs/tutorials/deploy-to-playground
+
 - Custom Domains: https://docs.defang.io/docs/tutorials/use-your-own-domain-name
 - GitHub Actions: https://docs.defang.io/docs/tutorials/deploying-from-github-actions
 - Pulumi Tutorial: https://docs.defang.io/docs/tutorials/deploy-using-pulumi

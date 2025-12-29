@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Defang is a radically simpler platform for building and deploying production-ready cloud applications. It eliminates the complexity of learning hundreds of cloud services by allowing developers to use familiar Docker Compose files to define multi-container applications and deploy them to AWS, GCP, DigitalOcean, or the free Defang Playground environment. The platform handles all the heavy lifting including VPC configuration, load balancing, security groups, observability, SSL certificates, and DNS management, transforming what typically requires weeks of cloud infrastructure knowledge into a single command deployment process.
+Defang is a radically simpler platform for building and deploying production-ready cloud applications. It eliminates the complexity of learning hundreds of cloud services by allowing developers to use familiar Docker Compose files to define multi-container applications and deploy them to AWS or GCP. The platform handles all the heavy lifting including VPC configuration, load balancing, security groups, observability, SSL certificates, and DNS management, transforming what typically requires weeks of cloud infrastructure knowledge into a single command deployment process.
 
-The Defang CLI includes an AI-powered agent that translates natural language prompts into complete project scaffolding with Dockerfiles, compose files, and application code. It supports both Bring-Your-Own-Cloud (BYOC) deployments to your own cloud accounts and a free hosted Playground for testing and development. With managed services for PostgreSQL, Redis, MongoDB, object storage, and LLM integrations (AWS Bedrock, GCP Vertex AI), Defang enables developers to focus on building features rather than wrestling with cloud infrastructure, while maintaining best practices for security, scalability, and zero-downtime deployments.
+The Defang CLI includes an AI-powered agent that translates natural language prompts into complete project scaffolding with Dockerfiles, compose files, and application code. It supports Bring-Your-Own-Cloud (BYOC) deployments to your own AWS or GCP accounts. With managed services for PostgreSQL, Redis, MongoDB, object storage, and LLM integrations (AWS Bedrock, GCP Vertex AI), Defang enables developers to focus on building features rather than wrestling with cloud infrastructure, while maintaining best practices for security, scalability, and zero-downtime deployments.
 
 ## APIs and Key Functions
 
@@ -37,38 +37,6 @@ defang generate
 # Deploy the generated project
 cd project1
 defang compose up
-```
-
-### Deploy to Defang Playground
-
-Deploy applications to the free hosted Playground environment with a single command, perfect for testing and non-production workloads.
-
-```bash
-# Navigate to project directory
-cd path/to/your/project
-
-# Deploy to Playground (default provider)
-defang compose up
-
-# Expected output:
-# * Uploading build context for app
-# * Deploying service app
-# * Monitor your services' status in the defang portal
-#   - https://portal.defang.dev/service/app
-# * Tailing logs for deployment ID o59k89vk3qc8
-# 2024-09-19T10:51:39.419693-07:00 app Server running at http://0.0.0.0:3000/
-# * Service app is in state DEPLOYMENT_COMPLETED and will be available at:
-#   - https://jordanstephens-app--3000.prod1.defang.dev
-# * Done.
-
-# Check service status
-defang compose ps
-
-# View logs
-defang logs app
-
-# Take down services
-defang compose down
 ```
 
 ### Deploy to AWS BYOC
@@ -263,8 +231,6 @@ services:
 # Provider support:
 # - AWS: RDS Postgres (fully managed)
 # - GCP: Cloud SQL Postgres (fully managed)
-# - Playground: Unmanaged container
-# - DigitalOcean: Unmanaged container
 
 # Connection from application code (Node.js example):
 # const { Pool } = require('pg')
@@ -301,8 +267,6 @@ services:
 # Provider support:
 # - AWS: Bedrock (requires model access enabled)
 # - GCP: Vertex AI (requires model access enabled)
-# - Playground: Default model only
-# - DigitalOcean: Not supported
 
 # Before deployment, enable model access:
 # AWS: https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html
@@ -412,7 +376,6 @@ defang logs app --follow
 defang logs app --since 1h
 
 # Service naming and DNS resolution:
-# Playground: <username>-<service-name>--<port>.prod1a.defang.dev
 # BYOC: <service-name>--<port>.<project-name>.<username>.defang.app
 
 # Scale service replicas (update compose.yaml)
@@ -522,7 +485,8 @@ jobs:
       - uses: DefangLabs/defang-github-action@v1
         with:
           defang-token: ${{ secrets.DEFANG_TOKEN }}
-          provider: playground
+          provider: gcp
+          gcp-project-id: ${{ secrets.GCP_PROJECT_ID }}
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
@@ -550,9 +514,9 @@ env:
   CONFIG_API_KEY: ${{ secrets.CONFIG_API_KEY }}
 ```
 
-### Deploy to GCP and DigitalOcean
+### Deploy to GCP
 
-Deploy applications to Google Cloud Platform or DigitalOcean with provider-specific configurations.
+Deploy applications to Google Cloud Platform with provider-specific configurations.
 
 ```bash
 # Deploy to GCP
@@ -577,28 +541,9 @@ defang compose up --provider=gcp
 # - Secret Manager
 # - Cloud Build
 
-# Deploy to DigitalOcean
-# Prerequisites:
-# 1. DigitalOcean account
-# 2. Personal access token
-
-# Set DigitalOcean credentials
-export DIGITALOCEAN_TOKEN=dop_v1_xxxxxxxxxxxxx
-
-# Deploy to DigitalOcean
-defang compose up --provider=digitalocean
-
-# DigitalOcean provisions:
-# - App Platform services
-# - Load Balancer
-# - Managed databases (coming soon)
-# - Container Registry
-
 # Provider comparison:
 # AWS (GA): Full feature support, best for production
 # GCP (Public Preview): Core features, managed services
-# DigitalOcean (Public Preview): Simplified deployment
-# Playground: Free tier, testing only
 ```
 
 ### Pulumi Integration
@@ -664,6 +609,6 @@ const db = new defang.DefangPostgres("database", {
 
 ## Summary
 
-Defang transforms cloud deployment from a complex, time-consuming process into a streamlined developer experience. By leveraging familiar Docker Compose files and adding intelligent cloud automation, it enables teams to deploy production-ready applications in minutes rather than weeks. The platform's core use cases include: rapid prototyping and testing in the free Playground environment; production deployments to AWS, GCP, or DigitalOcean with full infrastructure automation; microservices architectures with automatic service discovery and networking; stateful applications using managed PostgreSQL, Redis, and MongoDB; and AI-powered applications with integrated LLM services from AWS Bedrock or GCP Vertex AI.
+Defang transforms cloud deployment from a complex, time-consuming process into a streamlined developer experience. By leveraging familiar Docker Compose files and adding intelligent cloud automation, it enables teams to deploy production-ready applications in minutes rather than weeks. The platform's core use cases include: production deployments to AWS or GCP with full infrastructure automation; microservices architectures with automatic service discovery and networking; stateful applications using managed PostgreSQL, Redis, and MongoDB; and AI-powered applications with integrated LLM services from AWS Bedrock or GCP Vertex AI.
 
-Integration patterns center around a "develop once, deploy anywhere" philosophy. Teams can start with local Docker Compose development, test in the Playground, then deploy to production cloud environments with zero code changes. The AI-powered generate command accelerates project setup, while the debug command reduces troubleshooting time when issues occur. For CI/CD workflows, the GitHub Action enables automated deployments with proper secret management and multi-environment support. The platform maintains security best practices automatically, including VPC isolation, SSL certificate management, encrypted secrets storage, and principle-of-least-privilege IAM roles, allowing developers to focus on building features while Defang handles the operational complexity of cloud infrastructure.
+Integration patterns center around a "develop once, deploy anywhere" philosophy. Teams can start with local Docker Compose development, then deploy to production cloud environments on AWS or GCP with zero code changes. The AI-powered generate command accelerates project setup, while the debug command reduces troubleshooting time when issues occur. For CI/CD workflows, the GitHub Action enables automated deployments with proper secret management and multi-environment support. The platform maintains security best practices automatically, including VPC isolation, SSL certificate management, encrypted secrets storage, and principle-of-least-privilege IAM roles, allowing developers to focus on building features while Defang handles the operational complexity of cloud infrastructure.
