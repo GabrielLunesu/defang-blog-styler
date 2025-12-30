@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,22 +14,14 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials for CI
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-west-2
-          role-to-assume: arn:aws:iam::488659951590:role/ci-role-d4fe904
-
-      - name: Configure AWS Credentials for Dev Account
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-west-2
-          role-chaining: true
-          role-duration-seconds: 1200
-          role-to-assume: arn:aws:iam::532501343364:role/admin
-
       - name: Deploy
         uses: DefangLabs/defang-github-action@v1.2.3
         with:
           provider: aws
           compose-files: compose.yaml
+        env:
+          DEFANG_ACCESS_TOKEN: ${{ secrets.DEFANG_ACCESS_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: us-west-2
