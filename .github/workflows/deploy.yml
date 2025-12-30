@@ -18,13 +18,21 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS Credentials for CI
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: us-west-2
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::488659951590:role/ci-role-d4fe904
 
-      - name: Deploy with Defang
+      - name: Configure AWS Credentials for Dev Account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-west-2
+          role-chaining: true
+          role-duration-seconds: 1200
+          role-to-assume: arn:aws:iam::532501343364:role/admin
+
+      - name: Deploy
         uses: DefangLabs/defang-github-action@v1.2.3
         with:
           provider: aws
