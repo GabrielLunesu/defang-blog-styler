@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import AIToolbar from "@/components/AIToolbar";
+import SEOAnalyzer from "@/components/SEOAnalyzer";
+import BlogBriefForm, { BlogBrief } from "@/components/BlogCreator/BlogBriefForm";
+import MarkdownEditor from "@/components/BlogCreator/MarkdownEditor";
 
 // Lazy load heavy editor components
 const CodeEditor = lazy(() => import("@/components/CodeEditor"));
@@ -50,9 +53,7 @@ const ALLOWED_TAGS = new Set([
   "article", "section", "div", "span", "p", "a", "strong", "em", "ul", "ol", "li",
   "h1", "h2", "h3", "h4", "h5", "h6", "pre", "code", "table", "thead", "tbody",
   "tr", "th", "td", "figure", "figcaption", "img", "details", "summary", "blockquote", "hr", "br",
-  // SVG elements for icons
   "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "clipPath", "use",
-  // Additional semantic elements
   "nav", "header", "footer", "aside", "main", "time", "cite", "mark", "small", "sub", "sup",
 ]);
 
@@ -65,7 +66,6 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   img: new Set(["src", "alt", "width", "height", "loading"]),
   th: new Set(["scope", "colspan", "rowspan"]),
   td: new Set(["colspan", "rowspan"]),
-  // SVG attributes
   svg: new Set(["viewBox", "fill", "stroke", "xmlns", "width", "height", "preserveAspectRatio"]),
   path: new Set(["d", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"]),
   circle: new Set(["cx", "cy", "r", "fill", "stroke", "stroke-width"]),
@@ -75,7 +75,6 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   polygon: new Set(["points", "fill", "stroke"]),
   g: new Set(["fill", "stroke", "transform"]),
   use: new Set(["href", "xlink:href", "x", "y", "width", "height"]),
-  // Time element
   time: new Set(["datetime"]),
 };
 
@@ -175,6 +174,7 @@ const sanitizeHtml = (html: string) => {
   return doc.body.innerHTML;
 };
 
+type AppMode = "create" | "style";
 type EditorMode = "preview" | "visual" | "code";
 
 interface SEOMetadata {
@@ -189,7 +189,6 @@ interface SEOMetadata {
   targetAudience?: string;
 }
 
-// Parse SEO metadata from the response
 const parseSEOAndHtml = (text: string): { seo: SEOMetadata | null; html: string } => {
   const startMarker = "<!-- SEO_META_START -->";
   const endMarker = "<!-- SEO_META_END -->";
@@ -212,13 +211,44 @@ const parseSEOAndHtml = (text: string): { seo: SEOMetadata | null; html: string 
   }
 };
 
+// Extract SEO metadata from markdown frontmatter
+const parseMarkdownMeta = (markdown: string): SEOMetadata | null => {
+  const frontmatterMatch = markdown.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatterMatch) return null;
+
+  const frontmatter = frontmatterMatch[1];
+  const meta: SEOMetadata = {};
+
+  const titleMatch = frontmatter.match(/title:\s*["']?([^"'\n]+)["']?/);
+  if (titleMatch) meta.title = titleMatch[1].trim();
+
+  const descMatch = frontmatter.match(/description:\s*["']?([^"'\n]+)["']?/);
+  if (descMatch) meta.description = descMatch[1].trim();
+
+  const tagsMatch = frontmatter.match(/tags:\s*\[(.*?)\]/);
+  if (tagsMatch) {
+    meta.keywords = tagsMatch[1].split(",").map(t => t.trim().replace(/["']/g, ""));
+  }
+
+  return Object.keys(meta).length > 0 ? meta : null;
+};
+
 export default function Home() {
+  // App mode
+  const [appMode, setAppMode] = useState<AppMode>("create");
+
+  // Create mode state
+  const [markdown, setMarkdown] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Style mode state
   const [content, setContent] = useState(SAMPLE_CONTENT);
   const [html, setHtml] = useState("");
   const [seoMetadata, setSeoMetadata] = useState<SEOMetadata | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("preview");
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
+
   const previewRef = useRef<HTMLDivElement>(null);
   const sanitizedHtml = useMemo(() => sanitizeHtml(html), [html]);
 
@@ -230,6 +260,45 @@ export default function Home() {
     }
   }, [html]);
 
+  // Create blog handler
+  const handleCreateBlog = async (brief: BlogBrief) => {
+    setIsCreating(true);
+    setMarkdown("");
+
+    try {
+      const res = await fetch("/api/create-blog/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(brief),
+      });
+
+      if (!res.body) throw new Error("No response body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let result = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        result += chunk;
+        setMarkdown(result);
+      }
+
+      // Extract metadata for SEO analyzer
+      const meta = parseMarkdownMeta(result);
+      if (meta) setSeoMetadata(meta);
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Failed to create blog. Check console for details.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Style blog handler
   const handleGenerate = async () => {
     setIsGenerating(true);
     setHtml("");
@@ -256,13 +325,11 @@ export default function Home() {
         const chunk = decoder.decode(value, { stream: true });
         result += chunk;
 
-        // Parse SEO and HTML as we stream
         const { seo, html: parsedHtml } = parseSEOAndHtml(result);
         if (seo) setSeoMetadata(seo);
         setHtml(parsedHtml);
       }
 
-      // Final parse after stream completes
       const { seo, html: parsedHtml } = parseSEOAndHtml(result);
       if (seo) setSeoMetadata(seo);
       setHtml(parsedHtml);
@@ -272,6 +339,16 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Convert markdown to HTML (switch modes)
+  const handleConvertToHtml = () => {
+    setContent(markdown);
+    setAppMode("style");
+    // Auto-generate after a small delay
+    setTimeout(() => {
+      handleGenerate();
+    }, 100);
   };
 
   const handleCopy = () => {
@@ -328,17 +405,14 @@ export default function Home() {
     previewWindow.document.close();
   };
 
-  // Handle code editor changes
   const handleCodeChange = useCallback((value: string) => {
     setHtml(value);
   }, []);
 
-  // Handle visual editor changes
   const handleVisualChange = useCallback((value: string) => {
     setHtml(value);
   }, []);
 
-  // Handle selection changes from code editor
   const handleCodeSelectionChange = useCallback(
     (selection: { text: string } | null) => {
       setSelectedContent(selection?.text || null);
@@ -346,7 +420,6 @@ export default function Home() {
     []
   );
 
-  // Handle selection changes from visual editor
   const handleVisualSelectionChange = useCallback(
     (selection: { text: string; html: string } | null) => {
       setSelectedContent(selection?.html || null);
@@ -354,7 +427,6 @@ export default function Home() {
     []
   );
 
-  // Handle AI toolbar apply
   const handleAIApply = useCallback((newContent: string) => {
     if (editorMode === "code") {
       const codeAPI = (window as unknown as { codeEditorAPI?: { replaceSelection: (text: string) => void } }).codeEditorAPI;
@@ -383,173 +455,251 @@ export default function Home() {
           <div className="flex items-center gap-4" data-aos="fade-down">
             <Image src="/logo.png" alt="Defang" width={160} height={48} className="h-9 w-auto" priority />
             <div className="border-l border-border pl-4">
-              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Blog Styler</p>
-              <p className="text-sm text-muted-foreground">Blog to HTML converter</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Blog Studio</p>
+              <p className="text-sm text-muted-foreground">Create & style blogs</p>
             </div>
           </div>
-          <a
-            href="https://defang.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-muted-foreground transition hover:text-foreground"
-          >
-            defang.io →
-          </a>
+
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-4">
+            <div className="inline-flex items-center rounded-full border border-border bg-muted p-1">
+              <Button
+                variant={appMode === "create" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setAppMode("create")}
+                className="rounded-full"
+              >
+                <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Create
+              </Button>
+              <Button
+                variant={appMode === "style" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setAppMode("style")}
+                className="rounded-full"
+              >
+                <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+                Style
+              </Button>
+            </div>
+            <a
+              href="https://defang.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-muted-foreground transition hover:text-foreground"
+            >
+              defang.io →
+            </a>
+          </div>
         </div>
       </header>
 
       <section className="mx-auto max-w-7xl px-4 pb-16 pt-10">
         <div className="grid gap-8">
-          {/* Hero */}
+          {/* Hero - Dynamic based on mode */}
           <Card data-aos="fade-up">
             <CardHeader>
-              <CardTitle className="text-3xl sm:text-4xl">Convert blog drafts into clean HTML.</CardTitle>
+              <CardTitle className="text-3xl sm:text-4xl">
+                {appMode === "create"
+                  ? "Create blog posts with AI."
+                  : "Convert blog drafts into clean HTML."}
+              </CardTitle>
               <CardDescription className="text-base">
-                Paste your content, generate styled HTML, then refine with visual or code editing and AI assistance.
+                {appMode === "create"
+                  ? "Describe your topic, and AI will write a complete blog post with proper Defang context and SEO optimization."
+                  : "Paste your content, generate styled HTML, then refine with visual or code editing and AI assistance."}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                <Badge>Visual Editor</Badge>
-                <Badge>Code Editor</Badge>
-                <Badge>AI Assist</Badge>
-                <Badge>AOS Animations</Badge>
+                {appMode === "create" ? (
+                  <>
+                    <Badge>AI Writing</Badge>
+                    <Badge>Markdown Output</Badge>
+                    <Badge>Live Preview</Badge>
+                    <Badge>SEO Optimized</Badge>
+                  </>
+                ) : (
+                  <>
+                    <Badge>Visual Editor</Badge>
+                    <Badge>Code Editor</Badge>
+                    <Badge>AI Assist</Badge>
+                    <Badge>AOS Animations</Badge>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Main Grid */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Input Panel */}
-            <Card data-aos="fade-up" data-aos-delay="100">
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
-                <div>
-                  <CardTitle>Raw Content</CardTitle>
-                  <CardDescription>Paste markdown, docs, or notes</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setContent(SAMPLE_CONTENT)}>
-                  Load Sample
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Paste your raw blog content here..."
-                  className="h-[480px] resize-none font-mono"
-                />
+          {/* CREATE MODE */}
+          {appMode === "create" && (
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Blog Brief Form */}
+              <div data-aos="fade-up" data-aos-delay="100">
+                <BlogBriefForm onSubmit={handleCreateBlog} isLoading={isCreating} />
+              </div>
 
-                <Button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !content}
-                  className={`w-full py-6 text-base transition-all duration-300 ${
-                    isGenerating
-                      ? "bg-gradient-to-r from-primary via-accent to-primary bg-[length:200%_100%] animate-gradient"
-                      : ""
-                  }`}
-                  size="lg"
-                >
-                  {isGenerating ? (
-                    <span className="flex items-center justify-center gap-3">
-                      <span className="flex gap-1">
-                        <span className="h-2 w-2 rounded-full bg-white animate-bounce [animation-delay:-0.3s]" />
-                        <span className="h-2 w-2 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
-                        <span className="h-2 w-2 rounded-full bg-white animate-bounce" />
-                      </span>
-                      <span>Generating...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              {/* Markdown Editor - spans 2 columns */}
+              <Card className="lg:col-span-2" data-aos="fade-up" data-aos-delay="150">
+                <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap pb-4">
+                  <div>
+                    <CardTitle>Blog Draft</CardTitle>
+                    <CardDescription>Edit your generated markdown</CardDescription>
+                  </div>
+                  {markdown && (
+                    <Button onClick={handleConvertToHtml} className="gap-2">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                       </svg>
-                      Generate
-                    </span>
+                      Convert to HTML
+                    </Button>
                   )}
-                </Button>
-
-                {/* AI Toolbar - shows when in edit mode */}
-                {(editorMode === "code" || editorMode === "visual") && (
-                  <div className="pt-4 border-t border-border">
-                    <AIToolbar
-                      selectedContent={selectedContent}
-                      onApply={handleAIApply}
-                      context={html.slice(0, 1000)}
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[600px]">
+                    <MarkdownEditor
+                      value={markdown}
+                      onChange={setMarkdown}
+                      isStreaming={isCreating}
                     />
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
-            {/* Output Panel - spans 2 columns */}
-            <Card className="lg:col-span-2" data-aos="fade-up" data-aos-delay="150">
-              <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
-                {/* Mode Tabs */}
-                <div className="inline-flex items-center rounded-full border border-border bg-muted p-1">
-                  <Button
-                    variant={editorMode === "preview" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setEditorMode("preview")}
-                  >
-                    Preview
+          {/* STYLE MODE */}
+          {appMode === "style" && (
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Input Panel */}
+              <Card data-aos="fade-up" data-aos-delay="100">
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
+                  <div>
+                    <CardTitle>Raw Content</CardTitle>
+                    <CardDescription>Paste markdown, docs, or notes</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setContent(SAMPLE_CONTENT)}>
+                    Load Sample
                   </Button>
-                  <Button
-                    variant={editorMode === "visual" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setEditorMode("visual")}
-                  >
-                    Visual Edit
-                  </Button>
-                  <Button
-                    variant={editorMode === "code" ? "secondary" : "ghost"}
-                    size="sm"
-                    onClick={() => setEditorMode("code")}
-                  >
-                    Code Edit
-                  </Button>
-                </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Paste your raw blog content here..."
+                    className="h-[480px] resize-none font-mono"
+                  />
 
-                {/* Actions */}
-                {html && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={handleFullScreen}>
-                      <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                      </svg>
-                      Full Screen
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !content}
+                    className={`w-full py-6 text-base transition-all duration-300 ${
+                      isGenerating
+                        ? "bg-gradient-to-r from-primary via-accent to-primary bg-[length:200%_100%] animate-gradient"
+                        : ""
+                    }`}
+                    size="lg"
+                  >
+                    {isGenerating ? (
+                      <span className="flex items-center justify-center gap-3">
+                        <span className="flex gap-1">
+                          <span className="h-2 w-2 rounded-full bg-white animate-bounce [animation-delay:-0.3s]" />
+                          <span className="h-2 w-2 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
+                          <span className="h-2 w-2 rounded-full bg-white animate-bounce" />
+                        </span>
+                        <span>Generating...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Generate
+                      </span>
+                    )}
+                  </Button>
+
+                  {(editorMode === "code" || editorMode === "visual") && (
+                    <div className="pt-4 border-t border-border">
+                      <AIToolbar
+                        selectedContent={selectedContent}
+                        onApply={handleAIApply}
+                        context={html.slice(0, 1000)}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Output Panel - spans 2 columns */}
+              <Card className="lg:col-span-2" data-aos="fade-up" data-aos-delay="150">
+                <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
+                  <div className="inline-flex items-center rounded-full border border-border bg-muted p-1">
+                    <Button
+                      variant={editorMode === "preview" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setEditorMode("preview")}
+                    >
+                      Preview
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleCopy}>
-                      Copy HTML
+                    <Button
+                      variant={editorMode === "visual" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setEditorMode("visual")}
+                    >
+                      Visual Edit
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleDownload}>
-                      Download
+                    <Button
+                      variant={editorMode === "code" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setEditorMode("code")}
+                    >
+                      Code Edit
                     </Button>
                   </div>
+
+                  {html && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={handleFullScreen}>
+                        <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                        Full Screen
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleCopy}>
+                        Copy HTML
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleDownload}>
+                        Download
+                      </Button>
+                    </div>
+                  )}
+                </CardHeader>
+
+                {editorMode !== "preview" && (
+                  <div className="px-6 pb-2">
+                    <p className="text-xs text-muted-foreground flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700 text-xs">
+                        ✨ AI Assist
+                      </span>
+                      Select content and use AI toolbar on the left to improve, simplify, or restyle
+                    </p>
+                  </div>
                 )}
-              </CardHeader>
 
-              {/* Editor Hint */}
-              {editorMode !== "preview" && (
-                <div className="px-6 pb-2">
-                  <p className="text-xs text-muted-foreground flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700 text-xs">
-                      ✨ AI Assist
-                    </span>
-                    Select content and use AI toolbar on the left to improve, simplify, or restyle
-                  </p>
-                </div>
-              )}
-
-              <CardContent>
-                <div className="overflow-hidden rounded-2xl border border-border">
-                  {/* Preview Mode - uses iframe with Tailwind CDN for accurate rendering */}
-                  {editorMode === "preview" && (
-                    <div ref={previewRef} className="h-[700px] bg-white">
-                      {sanitizedHtml ? (
-                        <iframe
-                          className="w-full h-full border-0"
-                          title="Blog Preview"
-                          srcDoc={`<!DOCTYPE html>
+                <CardContent>
+                  <div className="overflow-hidden rounded-2xl border border-border">
+                    {editorMode === "preview" && (
+                      <div ref={previewRef} className="h-[700px] bg-white">
+                        {sanitizedHtml ? (
+                          <iframe
+                            className="w-full h-full border-0"
+                            title="Blog Preview"
+                            srcDoc={`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -558,7 +708,6 @@ export default function Home() {
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; background: white; color: #1e293b; }
-    /* Ensure animations play */
     [data-aos] { opacity: 1 !important; transform: none !important; }
   </style>
 </head>
@@ -569,56 +718,71 @@ export default function Home() {
   <script>AOS.init({ duration: 600, once: true });</script>
 </body>
 </html>`}
-                        />
-                      ) : isGenerating ? (
-                        <div className="flex flex-col items-center justify-center h-full gap-4">
-                          <div className="flex gap-1.5">
-                            <span className="h-3 w-3 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                            <span className="h-3 w-3 rounded-full bg-accent animate-bounce [animation-delay:-0.15s]" />
-                            <span className="h-3 w-3 rounded-full bg-primary animate-bounce" />
+                          />
+                        ) : isGenerating ? (
+                          <div className="flex flex-col items-center justify-center h-full gap-4">
+                            <div className="flex gap-1.5">
+                              <span className="h-3 w-3 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                              <span className="h-3 w-3 rounded-full bg-accent animate-bounce [animation-delay:-0.15s]" />
+                              <span className="h-3 w-3 rounded-full bg-primary animate-bounce" />
+                            </div>
+                            <p className="text-muted-foreground text-sm">Generating your styled blog...</p>
                           </div>
-                          <p className="text-muted-foreground text-sm">Generating your styled blog...</p>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-full">
-                          <p className="text-muted-foreground">Styled output will appear here...</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Visual Edit Mode */}
-                  {editorMode === "visual" && (
-                    <Suspense fallback={<EditorLoader />}>
-                      <div className="h-[700px]">
-                        <VisualEditor
-                          value={html}
-                          onChange={handleVisualChange}
-                          onSelectionChange={handleVisualSelectionChange}
-                        />
+                        ) : (
+                          <div className="flex items-center justify-center h-full">
+                            <p className="text-muted-foreground">Styled output will appear here...</p>
+                          </div>
+                        )}
                       </div>
-                    </Suspense>
-                  )}
+                    )}
 
-                  {/* Code Edit Mode */}
-                  {editorMode === "code" && (
-                    <Suspense fallback={<EditorLoader />}>
-                      <div className="h-[700px]">
-                        <CodeEditor
-                          value={html}
-                          onChange={handleCodeChange}
-                          onSelectionChange={handleCodeSelectionChange}
-                        />
-                      </div>
-                    </Suspense>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    {editorMode === "visual" && (
+                      <Suspense fallback={<EditorLoader />}>
+                        <div className="h-[700px]">
+                          <VisualEditor
+                            value={html}
+                            onChange={handleVisualChange}
+                            onSelectionChange={handleVisualSelectionChange}
+                          />
+                        </div>
+                      </Suspense>
+                    )}
 
-          {/* SEO Metadata Section */}
-          {seoMetadata && (
+                    {editorMode === "code" && (
+                      <Suspense fallback={<EditorLoader />}>
+                        <div className="h-[700px]">
+                          <CodeEditor
+                            value={html}
+                            onChange={handleCodeChange}
+                            onSelectionChange={handleCodeSelectionChange}
+                          />
+                        </div>
+                      </Suspense>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* SEO Analyzer - Shows for both modes when there's content */}
+          {((appMode === "create" && markdown) || (appMode === "style" && html)) && (
+            <SEOAnalyzer
+              content={appMode === "create" ? markdown : html}
+              contentType={appMode === "create" ? "markdown" : "html"}
+              seoMetadata={seoMetadata || undefined}
+              onFix={(fixed) => {
+                if (appMode === "create") {
+                  setMarkdown(fixed);
+                } else {
+                  setHtml(fixed);
+                }
+              }}
+            />
+          )}
+
+          {/* SEO Metadata Section - Style Mode Only */}
+          {appMode === "style" && seoMetadata && (
             <Card data-aos="fade-up" className="border-green-200 bg-gradient-to-br from-green-50/50 to-white">
               <CardHeader>
                 <div className="flex items-center gap-3">
@@ -635,42 +799,27 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {/* Title */}
                   {seoMetadata.title && (
                     <SEOField label="Meta Title" value={seoMetadata.title} charCount hint="50-60 chars ideal" />
                   )}
-
-                  {/* Description */}
                   {seoMetadata.description && (
                     <SEOField label="Meta Description" value={seoMetadata.description} charCount hint="150-160 chars ideal" className="md:col-span-2" />
                   )}
-
-                  {/* Keywords */}
                   {seoMetadata.keywords && seoMetadata.keywords.length > 0 && (
                     <SEOField label="Keywords" value={seoMetadata.keywords.join(", ")} className="md:col-span-2" />
                   )}
-
-                  {/* OG Title */}
                   {seoMetadata.ogTitle && (
                     <SEOField label="Open Graph Title" value={seoMetadata.ogTitle} />
                   )}
-
-                  {/* OG Description */}
                   {seoMetadata.ogDescription && (
                     <SEOField label="Open Graph Description" value={seoMetadata.ogDescription} />
                   )}
-
-                  {/* Canonical Slug */}
                   {seoMetadata.canonicalSlug && (
                     <SEOField label="URL Slug" value={seoMetadata.canonicalSlug} />
                   )}
-
-                  {/* Category */}
                   {seoMetadata.category && (
                     <SEOField label="Category" value={seoMetadata.category} />
                   )}
-
-                  {/* Read Time & Audience */}
                   <div className="flex gap-4 md:col-span-2">
                     {seoMetadata.estimatedReadTime && (
                       <div className="flex-1">
@@ -686,8 +835,6 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-
-                {/* Copy All Button */}
                 <div className="mt-6 pt-4 border-t border-green-100">
                   <Button
                     variant="outline"
@@ -716,7 +863,6 @@ export default function Home() {
   );
 }
 
-// SEO Field component with copy button
 function SEOField({
   label,
   value,

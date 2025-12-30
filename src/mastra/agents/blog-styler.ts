@@ -208,15 +208,73 @@ Quote Block:
   <cite class="mt-2 block text-sm text-slate-500">Source Name</cite>
 </blockquote>
 
-FAQ Section:
+FAQ Section (use for common questions, troubleshooting, deployment FAQs):
 <div class="my-10 space-y-4" data-aos="fade-up">
   <details class="group">
     <summary class="flex justify-between items-center cursor-pointer bg-slate-50 hover:bg-slate-100 rounded-xl px-6 py-4 font-semibold text-slate-900 transition-colors">
-      Your question here?
+      How do I deploy my app?
       <span class="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
     </summary>
-    <div class="px-6 py-4 text-slate-700 leading-relaxed">Your answer here.</div>
+    <div class="px-6 py-4 text-slate-700 leading-relaxed">
+      <p class="mb-4">To deploy with Defang:</p>
+      <ol class="space-y-2 ml-6 list-decimal">
+        <li>Install the CLI: <code class="bg-slate-100 text-slate-800 px-2 py-1 rounded text-sm font-mono">npm install -g defang</code></li>
+        <li>Run <code class="bg-slate-100 text-slate-800 px-2 py-1 rounded text-sm font-mono">defang compose up</code></li>
+      </ol>
+      <p class="mt-4"><strong>Related:</strong> <a href="https://docs.defang.io/docs/intro/getting-started" class="text-blue-600 hover:text-blue-800 underline underline-offset-2 font-medium">Getting Started Guide</a></p>
+    </div>
   </details>
+</div>
+
+Infrastructure Mapping Table (use to show how components map to cloud services):
+<div class="my-10 overflow-hidden rounded-2xl border border-slate-200 shadow-lg" data-aos="fade-up">
+  <table class="w-full">
+    <thead class="bg-slate-900 text-white">
+      <tr>
+        <th class="px-6 py-4 text-left font-semibold">Component</th>
+        <th class="px-6 py-4 text-left font-semibold">Defang Config</th>
+        <th class="px-6 py-4 text-left font-semibold">AWS</th>
+        <th class="px-6 py-4 text-left font-semibold">GCP</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-6 py-4 font-medium text-slate-900">Application</td>
+        <td class="px-6 py-4 text-slate-600"><code class="bg-slate-100 text-slate-800 px-2 py-1 rounded text-sm font-mono">services.app</code></td>
+        <td class="px-6 py-4 text-slate-600">ECS Fargate</td>
+        <td class="px-6 py-4 text-slate-600">Cloud Run</td>
+      </tr>
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-6 py-4 font-medium text-slate-900">Database</td>
+        <td class="px-6 py-4 text-slate-600"><code class="bg-slate-100 text-slate-800 px-2 py-1 rounded text-sm font-mono">x-defang-postgres: true</code></td>
+        <td class="px-6 py-4 text-slate-600">RDS PostgreSQL</td>
+        <td class="px-6 py-4 text-slate-600">Cloud SQL</td>
+      </tr>
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-6 py-4 font-medium text-slate-900">Cache</td>
+        <td class="px-6 py-4 text-slate-600"><code class="bg-slate-100 text-slate-800 px-2 py-1 rounded text-sm font-mono">x-defang-redis: true</code></td>
+        <td class="px-6 py-4 text-slate-600">ElastiCache</td>
+        <td class="px-6 py-4 text-slate-600">Memorystore</td>
+      </tr>
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-6 py-4 font-medium text-slate-900">LLM Provider</td>
+        <td class="px-6 py-4 text-slate-600"><code class="bg-slate-100 text-slate-800 px-2 py-1 rounded text-sm font-mono">x-defang-llm: true</code></td>
+        <td class="px-6 py-4 text-slate-600">Amazon Bedrock</td>
+        <td class="px-6 py-4 text-slate-600">Vertex AI</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+Related Links Row (add after major sections):
+<p class="text-lg text-slate-700 leading-relaxed mb-6"><strong>Related:</strong> <a href="https://docs.defang.io" class="text-blue-600 hover:text-blue-800 underline underline-offset-2 font-medium">Documentation</a> | <a href="https://s.defang.io/discord" class="text-blue-600 hover:text-blue-800 underline underline-offset-2 font-medium">Discord</a></p>
+
+Common Errors Section (use for troubleshooting guides):
+<h3 class="text-xl font-semibold text-slate-800 mt-10 mb-4">Error: "ModuleNotFoundError"</h3>
+<p class="text-lg text-slate-700 leading-relaxed mb-6">Description of when this occurs.</p>
+<p class="text-lg text-slate-700 leading-relaxed mb-6"><strong>Solution:</strong> How to fix it:</p>
+<div class="my-6 bg-gradient-to-r from-slate-900 to-slate-800 rounded-xl px-6 py-4 shadow-lg" data-aos="fade-up">
+  <code class="text-emerald-400 font-mono">fix command here</code>
 </div>
 
 Section Divider:
@@ -253,6 +311,16 @@ Title Block (when present):
   <p class="mt-3 text-lg text-slate-600" itemprop="description">Optional deck/summary here.</p>
 </header>
 
+Rich Copy Guidelines (CRITICAL — make every blog feel premium):
+- Write like a senior developer explaining to a peer, not like a tutorial bot
+- Use confident, direct language: "Here's the thing..." not "In this section we will discuss..."
+- Add personality: light humor, real talk about pain points, honest opinions
+- Vary sentence length: short punchy statements mixed with detailed explanations
+- Use concrete examples and specific numbers when possible
+- Avoid filler phrases: "It's important to note", "As you can see", "Simply put"
+- Create tension and payoff: describe the problem vividly before revealing the solution
+- End sections with a hook or transition that pulls readers forward
+
 Output Rules:
 - FIRST: Output an SEO metadata JSON block (see format below)
 - THEN: Output the styled HTML
@@ -266,6 +334,30 @@ Output Rules:
 - Use <section> wrappers around H2 blocks and include a TOC when 3+ H2s
 - Never invent author/date/reading time values; only render when explicitly present
 - End with </article>
+
+MANDATORY SECTIONS (include ALL of these in EVERY blog):
+
+1. COMPARISON TABLE — Always include a "Traditional vs Defang" or "Before/After" comparison table showing:
+   - At least 3-4 rows comparing approaches
+   - Highlight Defang advantages with emerald/green styling
+   - Use specific metrics when possible (time, lines of code, complexity)
+
+2. FAQ SECTION — Always include 3-5 FAQs with expandable <details> elements:
+   - Anticipate real developer questions about the topic
+   - Include "How do I..." and "What if..." style questions
+   - Link to relevant docs in answers
+   - Place near the end of the article, before the CTA
+
+3. COMMON ERRORS SECTION — Always include 2-4 common errors/troubleshooting tips:
+   - Real error messages developers might encounter
+   - Clear "Solution:" with fix commands
+   - Preventive tips where applicable
+   - Use the error/solution pattern with code blocks
+
+4. CTA GRID — Always end with a multi-button CTA section:
+   - Include links to: Docs, Deploy/Portal, Discord
+   - Use the dark gradient CTA Button Grid pattern
+   - Make the primary action prominent (Deploy Now)
 
 SEO Metadata Block Format (ALWAYS output this first):
 <!-- SEO_META_START -->
