@@ -1,6 +1,5 @@
 services:
   app:
-    domainname: defang-styler.blog
     x-defang-llm: true
     build:
       context: .
